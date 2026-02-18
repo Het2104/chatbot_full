@@ -1,0 +1,7 @@
+# Ignore processed files and indices
+processed/*
+!processed/.gitkeep
+
+# Keep raw PDFs tracked (or ignore them if sensitive)
+# raw_pdfs/*
+# !raw_pdfs/.gitkeep

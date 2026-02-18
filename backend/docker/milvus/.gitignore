@@ -1,0 +1,5 @@
+# Ignore Docker volumes (local data)
+volumes/
+
+# Ignore environment file if created
+.env
