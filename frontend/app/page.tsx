@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createChatbot, getChatbots, deleteChatbot } from "../services/api";
 import { Plus, MessageSquare, Trash2, ArrowRight, Bot, Sparkles, LayoutDashboard } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { NavBar } from '@/components/NavBar';
 
 type Chatbot = {
   id: string | number;
@@ -13,6 +15,7 @@ type Chatbot = {
 
 export default function Home() {
   const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +23,13 @@ export default function Home() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, authLoading, router]);
 
   const loadChatbots = async () => {
     setLoading(true);
@@ -35,8 +45,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    loadChatbots();
-  }, []);
+    if (isAuthenticated) {
+      loadChatbots();
+    }
+  }, [isAuthenticated]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,8 +86,25 @@ export default function Home() {
     }
   };
 
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      {/* Navigation Bar */}
+      <NavBar />
+      
       {/* Hero Section */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-6 py-8 md:py-10 text-center">

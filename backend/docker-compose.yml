@@ -1,0 +1,78 @@
+services:
+  # ============================================================================
+  # PostgreSQL: Main relational database
+  # ============================================================================
+  postgres:
+    container_name: chatbot-postgres
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chatbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatbot123}
+      POSTGRES_DB: ${POSTGRES_DB:-chatbot_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chatbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Redis: Cache and Pub/Sub
+  # ============================================================================
+  redis:
+    container_name: chatbot-redis
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Redis Commander: Web UI for Redis (Optional - Development only)
+  # ============================================================================
+  redis-commander:
+    container_name: chatbot-redis-commander
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+    profiles:
+      - dev  # Only starts with: docker-compose --profile dev up
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  chatbot-network:
+    driver: bridge
+
+# ============================================================================
+# Volumes (Persistent data storage)
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

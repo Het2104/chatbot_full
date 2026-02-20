@@ -15,6 +15,8 @@ from datetime import datetime
 from database import get_db
 from app.schemas.chat import ChatStartRequest, ChatStartResponse, ChatMessageRequest, ChatMessageResponse, TriggerNodeOption, NodeOption
 from app.services.chat_service import start_chat_session, process_message
+from app.services.faq_service import FAQService
+from app.dependencies.cache import get_faq_service
 from app.logging_config import get_logger
 
 router = APIRouter()
@@ -75,14 +77,18 @@ def start_chat(request: ChatStartRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/message", response_model=ChatMessageResponse)
-def send_message(request: ChatMessageRequest, db: Session = Depends(get_db)):
+def send_message(
+    request: ChatMessageRequest,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     Send a message to the chatbot and receive a response.
     
     This endpoint:
     1. Processes the user's message through the waterfall pattern:
        - Try workflow nodes
-       - Try FAQ
+       - Try FAQ (with Redis caching)
        - Try RAG (PDF documents)
        - Fallback to default
     2. Saves both user and bot messages to database
@@ -105,11 +111,12 @@ def send_message(request: ChatMessageRequest, db: Session = Depends(get_db)):
     logger.info(f"Received message for session_id={request.session_id}: '{request.message[:50]}...'")
     
     try:
-        # Process message through the waterfall pattern
+        # Process message through the waterfall pattern (with FAQ caching)
         bot_reply, next_conversation_options, chat_session = process_message(
             request.session_id, 
             request.message, 
-            db
+            db,
+            faq_service
         )
         
         # Convert internal dict format to API schema format

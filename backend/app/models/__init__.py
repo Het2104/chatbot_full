@@ -6,6 +6,7 @@ from .edge import Edge
 from .chat_session import ChatSession
 from .chat_message import ChatMessage
 from .faq import FAQ
+from .user import User
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "FAQ",
+    "User",
 ]

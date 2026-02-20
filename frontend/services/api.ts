@@ -19,6 +19,8 @@ type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
  * - JSON serialization/deserialization
  * - Error responses
  * - Empty responses (204 No Content)
+ * - JWT authentication (Authorization header)
+ * - Token expiration (401 responses)
  * 
  * @param path - API endpoint path (e.g., "/chatbots")
  * @param options - Request configuration
@@ -34,14 +36,33 @@ async function request<T>(
 ): Promise<T> {
 	const { method = "GET", body } = options;
 
+	// Build headers
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+	};
+
+	// Add Authorization header if token exists
+	const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+	if (token) {
+		headers['Authorization'] = `Bearer ${token}`;
+	}
+
 	// Make HTTP request
 	const response = await fetch(`${BASE_URL}${path}`, {
 		method,
-		headers: {
-			"Content-Type": "application/json",
-		},
+		headers,
 		body: body === undefined ? undefined : JSON.stringify(body),
 	});
+
+	// Handle token expiration
+	if (response.status === 401) {
+		// Clear auth state
+		if (typeof window !== 'undefined') {
+			localStorage.removeItem('access_token');
+			window.dispatchEvent(new Event('auth:logout'));
+		}
+		throw new Error('Session expired. Please login again.');
+	}
 
 	// Handle error responses
 	if (!response.ok) {

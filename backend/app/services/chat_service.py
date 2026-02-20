@@ -5,7 +5,7 @@ Handles all chat-related business logic including:
 - Starting new chat sessions
 - Processing user messages through a waterfall pattern:
   1. Try workflow nodes (trigger/response)
-  2. Try FAQ exact match
+  2. Try FAQ exact match (with Redis caching)
   3. Try RAG (PDF documents)
   4. Fallback to default response
 - Managing conversation state and message history
@@ -25,6 +25,7 @@ from app.models.faq import FAQ
 from app.logging_config import get_logger
 from app.config import DEFAULT_BOT_RESPONSE
 from app.utils import entity_not_found_error, no_active_workflow_error
+from app.services.faq_service import FAQService
 
 logger = get_logger(__name__)
 
@@ -271,7 +272,12 @@ def start_chat_session(chatbot_id: int, db: Session) -> Tuple[ChatSession, List[
     return session, trigger_nodes
 
 
-def process_message(session_id: int, user_message: str, db: Session) -> Tuple[str, List[Dict[str, any]], ChatSession]:
+def process_message(
+    session_id: int,
+    user_message: str,
+    db: Session,
+    faq_service: FAQService
+) -> Tuple[str, List[Dict[str, any]], ChatSession]:
     """
     Process a user message and return bot response with optional child node options.
     Uses a waterfall pattern to find the best response type.
@@ -279,7 +285,7 @@ def process_message(session_id: int, user_message: str, db: Session) -> Tuple[st
     
     Message Processing Flow (in order of priority):
     1. Workflow Nodes - Check if message matches any trigger/response node text
-    2. FAQs - Check if message matches any FAQ question
+    2. FAQs - Check if message matches any FAQ question (with Redis caching)
     3. RAG - Query PDF documents using AI
     4. Default - Fallback message if nothing matches
     
@@ -287,6 +293,7 @@ def process_message(session_id: int, user_message: str, db: Session) -> Tuple[st
         session_id: ID of the chat session
         user_message: User's message (already trimmed by schema validator)
         db: Database session
+        faq_service: FAQ service with caching support
         
     Returns:
         Tuple of (bot_response_text, next_options_list, chat_session_object)
@@ -330,10 +337,12 @@ def process_message(session_id: int, user_message: str, db: Session) -> Tuple[st
             logger.info(f"Workflow leaf node matched: '{matched_node.text}' - final response")
     
     # ========================================================================
-    # STEP 2: Try FAQ System (Second Priority)
+    # STEP 2: Try FAQ System (Second Priority) - with Redis caching
     # ========================================================================
     else:
-        faq_answer, faq_child_questions = _find_faq_response(session, user_message, db)
+        faq_answer, faq_child_questions = faq_service.get_faq_response(
+            session.chatbot_id, user_message, db
+        )
         
         if faq_answer is not None:
             # Found an FAQ match

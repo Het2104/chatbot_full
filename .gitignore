@@ -1,2 +1,21 @@
 .env
 backend/.env
+
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+
+# Virtual env
+venv/
+env/

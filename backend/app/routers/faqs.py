@@ -20,12 +20,19 @@ from app.models.faq import FAQ
 from app.models.chatbot import Chatbot
 from app.schemas.faq import FAQCreate, FAQUpdate, FAQResponse
 from app.utils import entity_not_found_error
+from app.services.faq_service import FAQService
+from app.dependencies.cache import get_faq_service
 
 router = APIRouter()
 
 
 @router.post("/chatbots/{chatbot_id}/faqs", response_model=FAQResponse, status_code=201)
-def create_faq(chatbot_id: int, faq: FAQCreate, db: Session = Depends(get_db)):
+def create_faq(
+    chatbot_id: int,
+    faq: FAQCreate,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     Create a new FAQ for a chatbot.
     
@@ -76,23 +83,19 @@ def create_faq(chatbot_id: int, faq: FAQCreate, db: Session = Depends(get_db)):
             detail="This question already exists for this chatbot"
         )
     
-    # Create the FAQ
-    new_faq = FAQ(
-        chatbot_id=chatbot_id,
-        question=trimmed_question,
-        answer=faq.answer,
-        parent_id=faq.parent_id,
-        is_active=faq.is_active,
-        display_order=faq.display_order
-    )
-    db.add(new_faq)
-    db.commit()
-    db.refresh(new_faq)
+    # Create the FAQ using service
+    new_faq = faq_service.create_faq(chatbot_id, faq, db)
     return new_faq
 
 
 @router.get("/chatbots/{chatbot_id}/faqs", response_model=List[FAQResponse])
-def list_faqs(chatbot_id: int, active_only: bool = False, parent_only: bool = False, db: Session = Depends(get_db)):
+def list_faqs(
+    chatbot_id: int,
+    active_only: bool = False,
+    parent_only: bool = False,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     List FAQs for a chatbot with optional filtering.
     
@@ -116,22 +119,17 @@ def list_faqs(chatbot_id: int, active_only: bool = False, parent_only: bool = Fa
     - Admin panel: no filters (show all for editing)
     - FAQ tree: active_only=true (build full hierarchy)
     """
-    # Build query with filters
-    query = db.query(FAQ).filter(FAQ.chatbot_id == chatbot_id)
-    
-    if active_only:
-        query = query.filter(FAQ.is_active == True)
-    
-    if parent_only:
-        query = query.filter(FAQ.parent_id == None)
-    
-    # Sort by display_order first, then creation date
-    faqs = query.order_by(FAQ.display_order, FAQ.created_at).all()
+    # Use service to get FAQs (not cached for list operations)
+    faqs = faq_service.get_all_faqs(chatbot_id, db, active_only, parent_only)
     return faqs
 
 
 @router.get("/faqs/{faq_id}", response_model=FAQResponse)
-def get_faq(faq_id: int, db: Session = Depends(get_db)):
+def get_faq(
+    faq_id: int,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     Get details of a specific FAQ by ID.
     
@@ -144,7 +142,7 @@ def get_faq(faq_id: int, db: Session = Depends(get_db)):
     Raises:
         404: If FAQ with given ID doesn't exist
     """
-    faq = db.query(FAQ).filter(FAQ.id == faq_id).first()
+    faq = faq_service.get_faq_by_id(faq_id, db)
     if not faq:
         raise HTTPException(
             status_code=404,
@@ -154,7 +152,12 @@ def get_faq(faq_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/faqs/{faq_id}", response_model=FAQResponse)
-def update_faq(faq_id: int, faq_update: FAQUpdate, db: Session = Depends(get_db)):
+def update_faq(
+    faq_id: int,
+    faq_update: FAQUpdate,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     Update an existing FAQ (partial update).
     
@@ -181,17 +184,17 @@ def update_faq(faq_id: int, faq_update: FAQUpdate, db: Session = Depends(get_db)
     Validation:
     - If question is updated, checks for duplicates (excluding current FAQ)
     - Question text is automatically trimmed
+    - Cache is automatically invalidated
     """
-    # Find the FAQ to update
-    faq = db.query(FAQ).filter(FAQ.id == faq_id).first()
-    if not faq:
-        raise HTTPException(
-            status_code=404,
-            detail=entity_not_found_error("FAQ", faq_id)
-        )
-    
     # If question is being updated, check for duplicates
     if faq_update.question is not None:
+        faq = faq_service.get_faq_by_id(faq_id, db)
+        if not faq:
+            raise HTTPException(
+                status_code=404,
+                detail=entity_not_found_error("FAQ", faq_id)
+            )
+        
         trimmed_new_question = faq_update.question.strip()
         
         # Only check if the question is actually changing
@@ -207,22 +210,28 @@ def update_faq(faq_id: int, faq_update: FAQUpdate, db: Session = Depends(get_db)
                     status_code=400, 
                     detail="This question already exists for this chatbot"
                 )
+            
+            # Trim the question in the update data
+            faq_update.question = trimmed_new_question
     
-    # Apply updates (only fields that were provided)
-    update_data = faq_update.model_dump(exclude_unset=True)
-    for field_name, new_value in update_data.items():
-        # Special handling: trim question text
-        if field_name == 'question' and new_value is not None:
-            new_value = new_value.strip()
-        setattr(faq, field_name, new_value)
+    # Update using service (handles cache invalidation)
+    updated_faq = faq_service.update_faq(faq_id, faq_update, db)
     
-    db.commit()
-    db.refresh(faq)
-    return faq
+    if not updated_faq:
+        raise HTTPException(
+            status_code=404,
+            detail=entity_not_found_error("FAQ", faq_id)
+        )
+    
+    return updated_faq
 
 
 @router.delete("/faqs/{faq_id}", status_code=204)
-def delete_faq(faq_id: int, db: Session = Depends(get_db)):
+def delete_faq(
+    faq_id: int,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service)
+):
     """
     Delete an FAQ permanently.
     
@@ -239,14 +248,13 @@ def delete_faq(faq_id: int, db: Session = Depends(get_db)):
         If this FAQ has child FAQs, they will also be deleted (cascade delete).
         Consider deactivating (is_active=False) instead of deleting if you want
         to preserve the FAQ hierarchy.
+        Cache is automatically invalidated.
     """
-    faq = db.query(FAQ).filter(FAQ.id == faq_id).first()
-    if not faq:
+    # Delete using service (handles cache invalidation)
+    deleted = faq_service.delete_faq(faq_id, db)
+    
+    if not deleted:
         raise HTTPException(
             status_code=404,
             detail=entity_not_found_error("FAQ", faq_id)
         )
-    
-    # SQLAlchemy cascade delete handles child FAQs
-    db.delete(faq)
-    db.commit()

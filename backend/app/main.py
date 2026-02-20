@@ -13,10 +13,11 @@ API documentation available at http://127.0.0.1:8000/docs
 
 from fastapi import FastAPI
 from database import create_tables
-from app.routers import chatbots, workflows, nodes, edges, chat, faqs, upload
+from app.routers import chatbots, workflows, nodes, edges, chat, faqs, upload, auth
 from fastapi.middleware.cors import CORSMiddleware
 from app.logging_config import setup_logging, get_logger
 from app.config import CORS_ALLOWED_ORIGINS, LOG_LEVEL, validate_config
+from app.services.redis_cache_service import get_redis_cache_service
 
 # ============================================================================
 # Logging Configuration
@@ -60,6 +61,12 @@ app.add_middleware(
 # ============================================================================
 # Each router handles a specific domain of the application
 # Routers define the API endpoints (e.g., /chatbots, /chat/start, etc.)
+
+# Authentication and user management
+app.include_router(
+    auth.router,
+    tags=["Authentication"]
+)
 
 # Chatbot management
 app.include_router(
@@ -116,9 +123,10 @@ def startup_event():
     
     Responsibilities:
     1. Create database tables if they don't exist
-    2. Log startup information
+    2. Initialize Redis cache connection
+    3. Log startup information
     
-    This ensures the database schema is ready before handling requests.
+    This ensures the database schema and cache are ready before handling requests.
     SQLAlchemy will check existing tables and only create missing ones.
     """
     logger.info("="*60)
@@ -129,6 +137,41 @@ def startup_event():
     create_tables()
     logger.info("Database tables created successfully")
     
+    logger.info("Initializing Redis cache service...")
+    redis_cache = get_redis_cache_service()
+    if redis_cache.is_available():
+        logger.info("Redis cache initialized successfully")
+    else:
+        logger.warning("Redis cache not available - running without cache")
+    
     logger.info("="*60)
     logger.info("Application startup complete - Ready to handle requests")
+    logger.info("="*60)
+
+
+# ============================================================================
+# Application Shutdown Event
+# ============================================================================
+@app.on_event("shutdown")
+def shutdown_event():
+    """
+    Runs once when the FastAPI application shuts down.
+    
+    Responsibilities:
+    1. Close Redis cache connection gracefully
+    2. Log shutdown information
+    
+    This ensures proper cleanup of resources.
+    """
+    logger.info("="*60)
+    logger.info("Application shutdown initiated")
+    logger.info("="*60)
+    
+    logger.info("Closing Redis cache connection...")
+    redis_cache = get_redis_cache_service()
+    redis_cache.close()
+    logger.info("Redis cache connection closed")
+    
+    logger.info("="*60)
+    logger.info("Application shutdown complete")
     logger.info("="*60)

@@ -35,6 +35,16 @@ CORS_ALLOWED_ORIGINS: List[str] = [
 
 
 # ============================================================================
+# JWT Authentication Configuration
+# ============================================================================
+
+# Secret key for JWT encoding/decoding (MUST be changed in production)
+SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-min-32-chars")
+ALGORITHM: str = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+
+# ============================================================================
 # File Upload Configuration
 # ============================================================================
 
@@ -123,6 +133,24 @@ MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME", "pdfs")
 MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
+
+
+# ============================================================================
+# Redis Configuration
+# ============================================================================
+
+REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+REDIS_SSL: bool = os.getenv("REDIS_SSL", "false").lower() == "true"
+REDIS_SOCKET_TIMEOUT: int = int(os.getenv("REDIS_SOCKET_TIMEOUT", "5"))
+REDIS_SOCKET_CONNECT_TIMEOUT: int = int(os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "5"))
+
+# Cache Configuration
+CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+FAQ_CACHE_TTL: int = int(os.getenv("FAQ_CACHE_TTL", "3600"))  # 1 hour in seconds
+FAQ_CACHE_PREFIX: str = "faq"
 
 
 # ============================================================================
