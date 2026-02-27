@@ -61,6 +61,61 @@ services:
     profiles:
       - dev  # Only starts with: docker-compose --profile dev up
 
+  # ============================================================================
+  # RabbitMQ: Message queue for chat request processing
+  # ============================================================================
+  rabbitmq:
+    container_name: chatbot-rabbitmq
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Worker: Background RAG job processor (consumes from RabbitMQ)
+  # ============================================================================
+  worker:
+    container_name: chatbot-worker
+    image: backend-worker
+    command: sh -c "pip install -q pika==1.3.2 && python -m app.worker.chat_worker"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:-guest}
+      - RABBITMQ_QUEUE_NAME=rag_processing_queue
+      - MILVUS_HOST=host.docker.internal
+      - MILVUS_PORT=${MILVUS_PORT:-19530}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DATABASE_URL=postgresql://postgres:admin123@host.docker.internal:5432/chatbot_db
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+
 # ============================================================================
 # Networks
 # ============================================================================

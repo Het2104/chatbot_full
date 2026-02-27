@@ -12,7 +12,6 @@ Key responsibilities:
 This powers the RAG (Retrieval Augmented Generation) system.
 """
 
-import os
 from typing import List
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -27,7 +26,6 @@ from app.config import (
     MAX_FILE_SIZE_BYTES,
     MAX_FILE_SIZE_MB,
     ALLOWED_FILE_EXTENSIONS,
-    RAW_PDFS_DIR,
 )
 from app.utils import (
     sanitize_filename,
@@ -215,10 +213,10 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise
     except Exception as e:
         # Unexpected error - clean up file from MinIO and return generic error
+        # Note: minio_storage is guaranteed to be set (assigned before this try block)
         logger.error(f"Unexpected upload error: {str(e)}", exc_info=True)
-        minio_storage = get_minio_storage()
         minio_storage.delete_pdf(safe_filename)
-        
+
         raise HTTPException(
             status_code=500,
             detail=upload_failed_error(str(e))

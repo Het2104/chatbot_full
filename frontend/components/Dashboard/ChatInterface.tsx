@@ -27,7 +27,8 @@ import {
     Bot,
     User
 } from 'lucide-react';
-import { startChat, sendMessage, getParentFAQs, getChatbots } from '../../services/api';
+import { startChat, sendMessage, queueMessage, getParentFAQs, getChatbots } from '../../services/api';
+import { WS_BASE_URL } from '../../services/api';
 
 // ============================================================================
 // Type Definitions
@@ -64,6 +65,7 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
     // UI state
     const [loading, setLoading] = useState(true);      // Initial loading
     const [sending, setSending] = useState(false);      // Sending message
+    const [waitingForRAG, setWaitingForRAG] = useState(false); // Waiting for RAG via WebSocket
     
     // Conversation options
     const [triggerNodes, setTriggerNodes] = useState<{ id: number, text: string }[]>([]);
@@ -146,6 +148,26 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
     }, [chatbotId]);
 
     // ========================================================================
+    // Helpers
+    // ========================================================================
+
+    /** Format the current time as "HH:MM AM/PM" for message timestamps. */
+    const toTimestamp = () =>
+        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    /**
+     * Build a bot Message object from response text and optional next-step options.
+     * Centralised here to avoid repeating the same object shape in every response path.
+     */
+    const makeBotMessage = (text: string, options?: { text: string }[]): Message => ({
+        id: Date.now() + 1,
+        sender: 'bot',
+        text,
+        options: options && options.length > 0 ? options : undefined,
+        timestamp: toTimestamp(),
+    });
+
+    // ========================================================================
     // Message Handling
     // ========================================================================
     
@@ -168,7 +190,7 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
             id: Date.now(),
             sender: 'user',
             text: text,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: toTimestamp(),
         };
 
         // Immediately show user message (optimistic UI update)
@@ -177,42 +199,64 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
         setSending(true);    // Show sending state
 
         try {
-            // Send message to backend and get bot response
-            const response = await sendMessage(sessionId, text);
-            
-            // 🔧 FIX: Log response for debugging
-            console.log('API Response:', response);
-            
-            // 🔧 FIX: Extract bot_response - handle both direct response and nested .data structure
-            const botReply = (response as any)?.bot_response || (response as any)?.data?.bot_response || '';
-            const options = (response as any)?.options || (response as any)?.data?.options || [];
-            
-            console.log('Bot Reply:', botReply);
-            console.log('Options:', options);
-            
-            // 🔧 FIX: Validate response
-            if (!botReply && botReply !== '') {
-                console.error('No bot_response found in response:', response);
-                throw new Error('Invalid response structure - missing bot_response field');
+            // ── Step 1: Queue the message (Workflow / FAQ check first) ─────────
+            const queueResult = await queueMessage(sessionId, text);
+
+            if (queueResult.cache_hit && queueResult.bot_response !== undefined) {
+                // ── Workflow or FAQ matched instantly ─────────────────────────
+                const botReply = queueResult.bot_response;
+                const options = queueResult.options || [];
+                setMessages(prev => [...prev, makeBotMessage(botReply, options)]);
+
+            } else if (queueResult.queued) {
+                // ── RAG path: open WebSocket and wait for worker response ─────
+                setSending(false);
+                setWaitingForRAG(true);
+
+                // No token needed — WebSocket endpoint has no auth (consistent
+                // with /chat/message/queue REST endpoint which also has no auth)
+                const wsUrl = `${WS_BASE_URL}/ws/chat/${queueResult.session_id}/${queueResult.job_id}`;
+                const ws = new WebSocket(wsUrl);
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        const isError = data?.status === 'error';
+                        // Use the response field from the worker payload;
+                        // fall back to a generic message if it is empty on error
+                        const botReply = data?.response
+                            || (isError ? 'Something went wrong. Please try again.' : '');
+                        const options = data?.next_options || [];
+
+                        setMessages(prev => [...prev, makeBotMessage(botReply, options)]);
+                    } catch (e) {
+                        console.error('Failed to parse WebSocket message', e);
+                        setMessages(prev => [...prev,
+                            makeBotMessage('Received an unreadable response. Please try again.')
+                        ]);
+                    } finally {
+                        setWaitingForRAG(false);
+                        ws.close();
+                    }
+                };
+
+                ws.onerror = () => {
+                    console.error('WebSocket error');
+                    setWaitingForRAG(false);
+                    setMessages(prev => [...prev,
+                        makeBotMessage('Connection error. Please try again.')
+                    ]);
+                };
+
+                ws.onclose = () => {
+                    setWaitingForRAG(false);
+                };
+
+                return; // Don't run finally setSending(false) — already done above
             }
 
-            // Create bot message object
-            const newBotMessage: Message = {
-                id: Date.now() + 1,
-                sender: 'bot',
-                text: botReply,
-                options: options.length > 0 ? options : undefined,  // Next conversation options (if any)
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            
-            // Add bot response to chat
-            setMessages(prev => [...prev, newBotMessage]);
-            
-            console.log('Messages updated successfully');
-            
         } catch (err) {
             console.error("Failed to send message", err);
-            // TODO: Show error message to user
         } finally {
             setSending(false);
         }
@@ -339,6 +383,20 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
                     
                     {/* Scroll anchor - Used by scrollToBottom() */}
                     <div ref={messagesEndRef} />
+
+                    {/* RAG Thinking Indicator - shown while waiting for WebSocket response */}
+                    {waitingForRAG && (
+                        <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-100 to-white border border-slate-100 flex items-center justify-center flex-none text-slate-600 shadow-sm mt-1">
+                                <Bot size={18} />
+                            </div>
+                            <div className="px-5 py-3.5 bg-white border border-slate-100 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1.5">
+                                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* ============================================================
@@ -354,7 +412,7 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {/* Display actual FAQs or fallback examples */}
-                            {(faqs.length > 0 ? faqs : [{ id: 0, question: 'Pricing' }, { id: 1, question: 'Support' }]).slice(0, 5).map((faq, i) => (
+                            {(faqs.length > 0 ? faqs : [{ id: 0, question: 'Pricing' }, { id: 1, question: 'Support' }]).slice(0, 5).map((faq) => (
                                 <button
                                     key={faq.id}
                                     onClick={() => handleSendMessage(faq.question)}
@@ -376,13 +434,13 @@ export default function ChatInterface({ chatbotId }: ChatInterfaceProps) {
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                             placeholder="Ask anything..."
-                            disabled={sending || !sessionId}
+                            disabled={sending || !sessionId || waitingForRAG}
                             className="w-full pl-6 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-400 transition-all hover:bg-white hover:shadow-md disabled:bg-slate-50 shadow-sm"
                             aria-label="Type your message"
                         />
                         <button
                             onClick={() => handleSendMessage()}
-                            disabled={sending || !sessionId}
+                            disabled={sending || !sessionId || waitingForRAG}
                             className={`absolute right-2 top-2 bottom-2 w-10 rounded-xl flex items-center justify-center shadow-md transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 disabled:shadow-none ${inputValue ? 'bg-black text-white shadow-slate-400' : 'bg-slate-200 text-slate-400'}`}
                             aria-label="Send message"
                         >

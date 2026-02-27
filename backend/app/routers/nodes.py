@@ -59,7 +59,9 @@ def create_node(workflow_id: int, node: NodeCreate, db: Session = Depends(get_db
             detail=entity_not_found_error("Workflow", workflow_id)
         )
     
-    # Validate node type (strict validation)
+    # Validate node type
+    # The NodeCreate schema already enforces this via Literal["trigger", "response"],
+    # but we keep the check as an explicit guard for clarity.
     if node.node_type not in {"trigger", "response"}:
         raise HTTPException(
             status_code=400, 

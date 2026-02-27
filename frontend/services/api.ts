@@ -8,7 +8,8 @@
  * All requests use JSON format except file uploads.
  */
 
-const BASE_URL = "http://127.0.0.1:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+export const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://127.0.0.1:8000";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -350,6 +351,34 @@ export async function startChat(chatbotId: string | number) {
  */
 export async function sendMessage(sessionId: string | number, message: string) {
 	return request(`/chat/message`, {
+		method: "POST",
+		body: { session_id: sessionId, message },
+	});
+}
+
+/**
+ * Queue a chat message for async processing (RabbitMQ + WebSocket flow).
+ *
+ * Flow:
+ *   - Workflow / FAQ match  → cache_hit=true, bot_response populated (no WebSocket needed)
+ *   - No match (RAG path)   → queued=true, open WS /ws/chat/{session_id} to get response
+ *
+ * @param sessionId - Existing chat session ID
+ * @param message   - User message text
+ * @returns ChatQueueResponse
+ */
+export async function queueMessage(
+	sessionId: string | number,
+	message: string
+): Promise<{
+	job_id: string;
+	session_id: number;
+	queued: boolean;
+	cache_hit: boolean;
+	bot_response?: string;
+	options?: { id?: number; text: string }[];
+}> {
+	return request(`/chat/message/queue`, {
 		method: "POST",
 		body: { session_id: sessionId, message },
 	});

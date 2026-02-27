@@ -14,10 +14,12 @@ API documentation available at http://127.0.0.1:8000/docs
 from fastapi import FastAPI
 from database import create_tables
 from app.routers import chatbots, workflows, nodes, edges, chat, faqs, upload, auth
+from app.routers import websocket as websocket_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.logging_config import setup_logging, get_logger
 from app.config import CORS_ALLOWED_ORIGINS, LOG_LEVEL, validate_config
 from app.services.redis_cache_service import get_redis_cache_service
+from app.services.redis_pubsub_service import get_redis_pubsub_service
 
 # ============================================================================
 # Logging Configuration
@@ -113,6 +115,12 @@ app.include_router(
     tags=["Upload"]
 )
 
+# WebSocket endpoint for real-time chat streaming
+app.include_router(
+    websocket_router.router,
+    tags=["WebSocket"]
+)
+
 # ============================================================================
 # Application Startup Event
 # ============================================================================
@@ -143,7 +151,16 @@ def startup_event():
         logger.info("Redis cache initialized successfully")
     else:
         logger.warning("Redis cache not available - running without cache")
-    
+
+    logger.info("Initializing Redis Pub/Sub service...")
+    pubsub = get_redis_pubsub_service()
+    if pubsub.is_available():
+        logger.info("Redis Pub/Sub initialized successfully")
+    else:
+        logger.warning("Redis Pub/Sub not available - WebSocket streaming will be unavailable")
+
+    logger.info("ChatWorker runs in Docker container (chatbot-worker)")
+
     logger.info("="*60)
     logger.info("Application startup complete - Ready to handle requests")
     logger.info("="*60)
@@ -171,7 +188,12 @@ def shutdown_event():
     redis_cache = get_redis_cache_service()
     redis_cache.close()
     logger.info("Redis cache connection closed")
-    
+
+    logger.info("Closing Redis Pub/Sub connection...")
+    pubsub = get_redis_pubsub_service()
+    pubsub.close()
+    logger.info("Redis Pub/Sub connection closed")
+
     logger.info("="*60)
     logger.info("Application shutdown complete")
     logger.info("="*60)

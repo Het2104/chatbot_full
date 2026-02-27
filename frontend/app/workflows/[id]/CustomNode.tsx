@@ -1,5 +1,30 @@
-import { memo } from "react";
+import { memo, CSSProperties, MouseEvent } from "react";
 import { Handle, Position } from "@xyflow/react";
+
+// ─── Shared delete-button styles and event handlers ───────────────────────────────────────────
+// Used identically in both TriggerNode and ResponseNode.
+const deleteButtonStyle: CSSProperties = {
+  width: "100%",
+  padding: "6px",
+  fontSize: "12px",
+  color: "#dc2626",
+  border: "1px solid #fca5a5",
+  borderRadius: "4px",
+  background: "#fef2f2",
+  cursor: "pointer",
+  fontWeight: "500",
+};
+
+const onDeleteMouseEnter = (e: MouseEvent<HTMLButtonElement>) => {
+  e.currentTarget.style.background = "#fee2e2";
+  e.currentTarget.style.borderColor = "#f87171";
+};
+
+const onDeleteMouseLeave = (e: MouseEvent<HTMLButtonElement>) => {
+  e.currentTarget.style.background = "#fef2f2";
+  e.currentTarget.style.borderColor = "#fca5a5";
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 type BaseNodeData = {
   text: string;
@@ -46,25 +71,9 @@ function TriggerNode({ data }: { data: BaseNodeData }) {
 
       <button
         onClick={() => data.onDelete(data.backendId)}
-        style={{
-          width: "100%",
-          padding: "6px",
-          fontSize: "12px",
-          color: "#dc2626",
-          border: "1px solid #fca5a5",
-          borderRadius: "4px",
-          background: "#fef2f2",
-          cursor: "pointer",
-          fontWeight: "500",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "#fee2e2";
-          e.currentTarget.style.borderColor = "#f87171";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#fef2f2";
-          e.currentTarget.style.borderColor = "#fca5a5";
-        }}
+        style={deleteButtonStyle}
+        onMouseEnter={onDeleteMouseEnter}
+        onMouseLeave={onDeleteMouseLeave}
       >
         Delete Node
       </button>
@@ -116,25 +125,9 @@ function ResponseNode({ data }: { data: BaseNodeData }) {
 
       <button
         onClick={() => data.onDelete(data.backendId)}
-        style={{
-          width: "100%",
-          padding: "6px",
-          fontSize: "12px",
-          color: "#dc2626",
-          border: "1px solid #fca5a5",
-          borderRadius: "4px",
-          background: "#fef2f2",
-          cursor: "pointer",
-          fontWeight: "500",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "#fee2e2";
-          e.currentTarget.style.borderColor = "#f87171";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#fef2f2";
-          e.currentTarget.style.borderColor = "#fca5a5";
-        }}
+        style={deleteButtonStyle}
+        onMouseEnter={onDeleteMouseEnter}
+        onMouseLeave={onDeleteMouseLeave}
       >
         Delete Node
       </button>

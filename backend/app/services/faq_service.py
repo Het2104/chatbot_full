@@ -6,7 +6,6 @@ Provides cache-first strategy for retrieving FAQs and automatic cache invalidati
 """
 
 import hashlib
-import logging
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 
@@ -14,8 +13,9 @@ from app.models.faq import FAQ
 from app.schemas.faq import FAQCreate, FAQUpdate, FAQResponse, FAQWithChildren
 from app.services.redis_cache_service import RedisCacheService
 from app.config import FAQ_CACHE_TTL, FAQ_CACHE_PREFIX
+from app.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FAQService:

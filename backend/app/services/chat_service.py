@@ -126,16 +126,19 @@ def _find_node_by_text(text: str, chatbot_id: int, db: Session) -> Optional[Node
 
 def _find_workflow_response(session: ChatSession, user_message: str, db: Session) -> Optional[str]:
     """
-    Find workflow response if an exact-match input node exists.
-    DEPRECATED: Kept for backward compatibility, but trigger system should be used instead.
-    
+    Find a workflow response for an exact-match trigger node.
+
+    Deprecated — no longer called by process_message.
+    The trigger-node approach via _find_node_by_text / _get_node_children replaced this.
+    Retained for reference and potential backward-compatibility use.
+
     Args:
         session: Current chat session
         user_message: User's message text
         db: Database session
-        
+
     Returns:
-        Response text if match found, None otherwise
+        Response text if a matching trigger→response edge exists, None otherwise
     """
     logger.debug(f"Checking workflow for exact match: '{user_message[:50]}...'")
     matching_input = db.query(Node).filter(
@@ -165,15 +168,19 @@ def _find_workflow_response(session: ChatSession, user_message: str, db: Session
 
 def _find_faq_response(session: ChatSession, user_message: str, db: Session) -> Tuple[Optional[str], List[str]]:
     """
-    Find FAQ response and child options for an exact-match FAQ.
-    
+    Find an FAQ response and child options for an exact-match question.
+
+    Deprecated — no longer called by process_message.
+    FAQService.get_faq_response (with Redis caching) replaced this direct DB lookup.
+    Retained for reference.
+
     Args:
         session: Current chat session
         user_message: User's message text
         db: Database session
-        
+
     Returns:
-        Tuple of (response text or None, list of child question options)
+        Tuple of (answer text or None, list of child question option strings)
     """
     logger.debug(f"Checking FAQ for exact match: '{user_message[:50]}...'")
     matching_faq = db.query(FAQ).filter(
@@ -328,7 +335,7 @@ def process_message(
         
         if child_nodes:
             # This node has children - show them as next conversation options
-            bot_response = f"Please choose:"
+            bot_response = "Please choose:"
             next_options = child_nodes
             logger.info(f"Workflow node matched: '{matched_node.text}' with {len(child_nodes)} child options")
         else:
@@ -406,3 +413,121 @@ def _save_chat_messages(session_id: int, user_message: str, bot_response: str, d
     db.add(bot_msg)
     
     db.commit()
+
+
+def check_sync_response(
+    session_id: int,
+    user_message: str,
+    db: Session,
+    faq_service: FAQService,
+) -> Tuple[Optional[str], List[Dict[str, any]]]:
+    """
+    Check Workflow and FAQ for an instant (synchronous) answer.
+
+    Used by the async queue endpoint BEFORE deciding to enqueue to RabbitMQ.
+    If a static answer is found here, there is no need to go to the RAG worker.
+
+    Priority:
+        1. Workflow node exact match
+        2. FAQ exact match (with Redis cache)
+
+    Args:
+        session_id:  Existing chat session ID.
+        user_message: User's message text.
+        db:           Database session.
+        faq_service:  FAQ service with caching.
+
+    Returns:
+        Tuple (bot_response, next_options) if a static match was found,
+        or (None, []) if nothing matched (RAG path needed).
+
+    Raises:
+        ValueError: If chat session not found.
+    """
+    logger.debug(
+        f"check_sync_response: session_id={session_id} "
+        f"message='{user_message[:50]}...'"
+    )
+
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise ValueError(entity_not_found_error("Chat session", session_id))
+
+    # ── Step 1: Workflow node ──────────────────────────────────────────────
+    matched_node = _find_node_by_text(user_message, session.chatbot_id, db)
+    if matched_node:
+        child_nodes = _get_node_children(matched_node.id, db)
+        if child_nodes:
+            bot_response = "Please choose:"
+            next_options = child_nodes
+        else:
+            bot_response = matched_node.text
+            next_options = []
+        logger.info(f"Sync match (workflow) for session_id={session_id}")
+        _save_chat_messages(session_id, user_message, bot_response, db)
+        return bot_response, next_options
+
+    # ── Step 2: FAQ (with Redis cache) ────────────────────────────────────
+    faq_answer, faq_child_questions = faq_service.get_faq_response(
+        session.chatbot_id, user_message, db
+    )
+    if faq_answer is not None:
+        next_options = [{"text": q} for q in faq_child_questions]
+        logger.info(f"Sync match (FAQ) for session_id={session_id}")
+        _save_chat_messages(session_id, user_message, faq_answer, db)
+        return faq_answer, next_options
+
+    # No static match found — caller should route to RAG worker
+    logger.debug(f"No sync match for session_id={session_id} — RAG path needed")
+    return None, []
+
+
+def process_rag_message(
+    session_id: int,
+    user_message: str,
+    db: Session,
+) -> Tuple[str, List[Dict[str, any]], ChatSession]:
+    """
+    Process a message using ONLY the RAG pipeline + default fallback.
+
+    Called by ChatWorker — Workflow and FAQ were already checked in the
+    queue endpoint before the job was enqueued, so we skip straight to RAG.
+
+    Saves both user and bot messages to the database.
+
+    Args:
+        session_id:   Existing chat session ID.
+        user_message: User's message text.
+        db:           Database session.
+
+    Returns:
+        Tuple (bot_response, next_options, session)
+
+    Raises:
+        ValueError: If chat session not found.
+    """
+    logger.info(
+        f"process_rag_message: session_id={session_id} "
+        f"message='{user_message[:50]}...'"
+    )
+
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise ValueError(entity_not_found_error("Chat session", session_id))
+
+    # ── RAG ───────────────────────────────────────────────────────────────
+    rag_answer = _find_rag_response(user_message, db)
+
+    if rag_answer is not None:
+        bot_response = rag_answer
+        logger.info(f"RAG answer generated for session_id={session_id}")
+    else:
+        # Default fallback
+        bot_response = DEFAULT_BOT_RESPONSE
+        logger.warning(
+            f"RAG returned nothing for session_id={session_id} — using default"
+        )
+
+    _save_chat_messages(session_id, user_message, bot_response, db)
+
+    return bot_response, [], session

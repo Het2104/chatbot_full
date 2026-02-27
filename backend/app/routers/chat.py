@@ -8,13 +8,20 @@ Provides REST API endpoints for chatbot conversations:
 These are the main endpoints used by the frontend chat interface.
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from database import get_db
-from app.schemas.chat import ChatStartRequest, ChatStartResponse, ChatMessageRequest, ChatMessageResponse, TriggerNodeOption, NodeOption
-from app.services.chat_service import start_chat_session, process_message
+from app.schemas.chat import (
+    ChatStartRequest, ChatStartResponse,
+    ChatMessageRequest, ChatMessageResponse,
+    ChatQueueRequest, ChatQueueResponse,
+    TriggerNodeOption, NodeOption,
+)
+from app.services.chat_service import start_chat_session, process_message, check_sync_response
 from app.services.faq_service import FAQService
 from app.dependencies.cache import get_faq_service
 from app.logging_config import get_logger
@@ -146,3 +153,94 @@ def send_message(
         # Session not found or validation error
         logger.warning(f"Failed to process message: {e}")
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/message/queue", response_model=ChatQueueResponse, status_code=202)
+def queue_message(
+    request: ChatQueueRequest,
+    db: Session = Depends(get_db),
+    faq_service: FAQService = Depends(get_faq_service),
+):
+    """
+    Async chat endpoint — Workflow/FAQ checked first, RAG goes to RabbitMQ.
+
+    Flow:
+      1. Check Workflow node exact match → return instantly if found.
+      2. Check FAQ (Redis cache) exact match → return instantly if found.
+      3. Neither matched (RAG needed) → enqueue job to RabbitMQ.
+         Frontend opens WS /ws/chat/{session_id}?token=<jwt> to get the response.
+
+    Request body:
+        session_id: Existing chat session ID
+        message:    User message text
+
+    Raises:
+        404: If chat session does not exist
+        503: If RabbitMQ is unavailable (only on RAG path)
+    """
+    logger.info(
+        f"Queue message request: session_id={request.session_id} "
+        f"message='{request.message[:50]}...'"
+    )
+
+    job_id = str(uuid.uuid4())
+
+    # ── Step 1 & 2: Workflow node + FAQ check (synchronous, instant) ──────────
+    try:
+        sync_response, sync_options = check_sync_response(
+            session_id=request.session_id,
+            user_message=request.message,
+            db=db,
+            faq_service=faq_service,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if sync_response is not None:
+        # Workflow or FAQ matched — return instantly, no queue needed
+        options = [
+            NodeOption(id=opt.get("id"), text=opt["text"])
+            for opt in sync_options
+        ]
+        logger.info(
+            f"Sync answer (workflow/FAQ) for session_id={request.session_id} — skipping queue"
+        )
+        return ChatQueueResponse(
+            job_id=job_id,
+            session_id=request.session_id,
+            queued=False,
+            cache_hit=True,
+            bot_response=sync_response,
+            options=options,
+        )
+
+    # ── Step 3: No static match — enqueue for RAG processing ────────────────
+    from app.services.rabbitmq_service import rabbitmq_service
+
+    job_payload = {
+        "job_id": job_id,
+        "session_id": request.session_id,
+        "user_message": request.message,
+    }
+
+    published = rabbitmq_service.publish_message(job_payload)
+
+    if not published:
+        logger.error(
+            f"RabbitMQ unavailable — could not enqueue RAG job for "
+            f"session_id={request.session_id}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Messaging service temporarily unavailable. Please try again.",
+        )
+
+    logger.info(
+        f"RAG job enqueued: job_id={job_id} session_id={request.session_id}"
+    )
+    return ChatQueueResponse(
+        job_id=job_id,
+        session_id=request.session_id,
+        queued=True,
+        cache_hit=False,
+    )

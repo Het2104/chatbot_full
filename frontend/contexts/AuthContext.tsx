@@ -17,7 +17,8 @@
  * - register(userData): Create new account
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 // ============================================================================
 // Types
@@ -56,6 +57,24 @@ interface LoginResponse {
 }
 
 // ============================================================================
+// JWT Helper
+// ============================================================================
+
+/**
+ * Decode JWT payload and return milliseconds remaining until token expires.
+ * Returns -1 if token is invalid or already expired.
+ */
+function getTokenExpiryMs(token: string): number {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.exp * 1000 - Date.now();
+  } catch {
+    return -1;
+  }
+}
+
+// ============================================================================
 // Context Creation
 // ============================================================================
 
@@ -71,6 +90,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
+
+  // Cancel any pending auto-logout timer
+  const cancelExpiryTimer = useCallback(() => {
+    if (expiryTimerRef.current) {
+      clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+  }, []);
+
+  // Clear all auth state (localStorage token + React state)
+  const clearAuthState = useCallback(() => {
+    localStorage.removeItem('access_token');
+    setIsAuthenticated(false);
+    setUser(null);
+    setRole(null);
+    setToken(null);
+  }, []);
+
+  /**
+   * Schedule automatic logout exactly when the JWT token expires.
+   * Cancels any previously scheduled timer before setting a new one.
+   */
+  const scheduleTokenExpiry = useCallback((token: string) => {
+    cancelExpiryTimer();
+
+    const msUntilExpiry = getTokenExpiryMs(token);
+
+    if (msUntilExpiry <= 0) {
+      // Token already expired — clear state and redirect immediately
+      clearAuthState();
+      router.push('/login');
+      return;
+    }
+
+    // Auto-logout exactly when the token expires
+    expiryTimerRef.current = setTimeout(() => {
+      expiryTimerRef.current = null;
+      clearAuthState();
+      router.push('/login');
+    }, msUntilExpiry);
+  }, [cancelExpiryTimer, clearAuthState, router]);
 
   // Initialize auth state from localStorage on mount
   useEffect(() => {
@@ -92,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setRole(userData.role);
             setToken(storedToken);
             setIsAuthenticated(true);
+            scheduleTokenExpiry(storedToken);
           } else {
             // Token expired or invalid
             localStorage.removeItem('access_token');
@@ -106,20 +170,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initializeAuth();
-  }, []);
+  }, [scheduleTokenExpiry]);
 
-  // Listen for logout events from API client
+  // Listen for logout events from API client (e.g. 401 on protected routes)
   useEffect(() => {
     const handleLogoutEvent = () => {
-      setIsAuthenticated(false);
-      setUser(null);
-      setRole(null);
-      setToken(null);
+      cancelExpiryTimer();
+      clearAuthState();
+      router.push('/login');
     };
 
     window.addEventListener('auth:logout', handleLogoutEvent);
     return () => window.removeEventListener('auth:logout', handleLogoutEvent);
-  }, []);
+  }, [router]);
 
   /**
    * Login user with email and password
@@ -148,20 +211,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setRole(data.user.role);
     setIsAuthenticated(true);
+
+    // Start countdown — auto-logout when token expires
+    scheduleTokenExpiry(data.access_token);
   };
 
   /**
    * Logout user and clear all auth state
    */
   const logout = () => {
-    // Clear localStorage
-    localStorage.removeItem('access_token');
-    
-    // Clear state
-    setIsAuthenticated(false);
-    setUser(null);
-    setRole(null);
-    setToken(null);
+    cancelExpiryTimer();
+    clearAuthState();
+    router.push('/login');
   };
 
   /**

@@ -152,6 +152,29 @@ CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() == "true"
 FAQ_CACHE_TTL: int = int(os.getenv("FAQ_CACHE_TTL", "3600"))  # 1 hour in seconds
 FAQ_CACHE_PREFIX: str = "faq"
 
+# Redis Pub/Sub Configuration
+REDIS_PUBSUB_CHANNEL_PREFIX: str = "chat_response"  # channel: chat_response:{session_id}
+
+# Worker Configuration
+WORKER_PREFETCH_COUNT: int = int(os.getenv("WORKER_PREFETCH_COUNT", "1"))
+
+# WebSocket Configuration
+WEBSOCKET_RESPONSE_TIMEOUT: float = float(os.getenv("WEBSOCKET_RESPONSE_TIMEOUT", "60"))
+
+
+# ============================================================================
+# RabbitMQ Configuration
+# ============================================================================
+
+RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT: int = int(os.getenv("RABBITMQ_PORT", "5672"))
+RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "guest")
+RABBITMQ_PASS: str = os.getenv("RABBITMQ_PASS", "guest")
+RABBITMQ_QUEUE_NAME: str = os.getenv("RABBITMQ_QUEUE_NAME", "rag_processing_queue")
+RABBITMQ_EXCHANGE: str = ""  # Default exchange
+RABBITMQ_HEARTBEAT: int = 60
+RABBITMQ_BLOCKED_CONNECTION_TIMEOUT: int = 300
+
 
 # ============================================================================
 # LLM Configuration

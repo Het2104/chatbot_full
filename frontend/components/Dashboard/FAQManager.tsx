@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * FAQManager Component
+ *
+ * Admin UI for creating and deleting FAQs for a chatbot.
+ * Supports a parent–child hierarchy:
+ *   - Parent FAQs are shown as top-level cards
+ *   - Child FAQs are indented below their parent and labelled "Follow-up"
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
 import { getFAQs, createFAQ, deleteFAQ, updateFAQ } from '../../services/api';
@@ -205,7 +214,7 @@ export default function FAQManager({ chatbotId }: FAQManagerProps) {
                             </div>
 
                             {/* Children */}
-                            {getChildren(faq.id).some(c => c) && (
+                            {getChildren(faq.id).length > 0 && (
                                 <div className="ml-8 mt-3 pl-6 border-l-2 border-slate-100 space-y-3">
                                     {getChildren(faq.id).map(child => (
                                         <div key={child.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 relative group/child hover:border-primary-200 transition-colors">
