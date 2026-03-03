@@ -97,8 +97,8 @@ POPPLER_PATHS: List[str] = [
 # ============================================================================
 
 # Embedding model
-EMBEDDING_MODEL: str = "all-MiniLM-L12-v2"
-EMBEDDING_DIMENSION: int = 384
+EMBEDDING_MODEL: str = "BAAI/bge-large-en-v1.5"
+EMBEDDING_DIMENSION: int = 1024
 
 # Retrieval parameters
 RAG_DEFAULT_TOP_K: int = 4
@@ -159,7 +159,7 @@ REDIS_PUBSUB_CHANNEL_PREFIX: str = "chat_response"  # channel: chat_response:{se
 WORKER_PREFETCH_COUNT: int = int(os.getenv("WORKER_PREFETCH_COUNT", "1"))
 
 # WebSocket Configuration
-WEBSOCKET_RESPONSE_TIMEOUT: float = float(os.getenv("WEBSOCKET_RESPONSE_TIMEOUT", "60"))
+WEBSOCKET_RESPONSE_TIMEOUT: float = float(os.getenv("WEBSOCKET_RESPONSE_TIMEOUT", "120"))
 
 
 # ============================================================================

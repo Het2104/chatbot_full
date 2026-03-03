@@ -49,7 +49,7 @@ async def websocket_chat(
     Server-side:
         1. Accepts the WebSocket connection
         2. Subscribes to Redis channel  chat_response:{session_id}
-        3. Waits for the ChatWorker to publish a result (up to 60 s)
+        3. Waits for the ChatWorker to publish a result (up to 120 s)
         4. Sends result as JSON text frame
         5. Closes connection
 

@@ -18,11 +18,11 @@ class QueryEmbedder:
     """
     Converts user queries into embedding vectors.
     
-    Uses the same model as offline processing (all-MiniLM-L12-v2)
+    Uses the same model as offline processing (BAAI/bge-large-en-v1.5)
     to ensure query and document embeddings are in the same vector space.
     """
     
-    def __init__(self, model_name: str = 'all-MiniLM-L12-v2'):
+    def __init__(self, model_name: str = 'BAAI/bge-large-en-v1.5'):
         """
         Initialize query embedder with the same model used for documents.
         
@@ -49,7 +49,7 @@ class QueryEmbedder:
             >>> query = "What is Theory X?"
             >>> embedding = embedder.embed_query(query)
             >>> embedding.shape
-            (384,)
+            (1024,)
         """
         if not query or not query.strip():
             logger.warning("Empty query provided to query embedder")
@@ -58,6 +58,9 @@ class QueryEmbedder:
         # Clean the query
         query = query.strip()
         logger.debug(f"Embedding query: '{query[:100]}...'")
+        
+        # bge models require this instruction prefix for query embeddings
+        query = f"Represent this sentence for searching relevant passages: {query}"
         
         # Generate embedding using the same model as offline processing
         embedding = self.embedder.embed_single(query)

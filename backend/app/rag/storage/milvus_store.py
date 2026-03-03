@@ -30,7 +30,7 @@ class MilvusVectorStore:
     Vector store using Milvus database with MinIO backend.
     
     Architecture:
-    - Stores embeddings (384-dimensional vectors)
+    - Stores embeddings (1024-dimensional vectors)
     - Stores metadata (chunk text, document info)
     - Performs fast similarity search
     """
@@ -49,7 +49,7 @@ class MilvusVectorStore:
             collection_name: Name of Milvus collection
             host: Milvus server host
             port: Milvus server port
-            embedding_dim: Dimension of embeddings (384 for all-MiniLM-L12-v2)
+            embedding_dim: Dimension of embeddings (1024 for BAAI/bge-large-en-v1.5)
         """
         self.collection_name = collection_name
         self.embedding_dim = embedding_dim
@@ -85,7 +85,7 @@ class MilvusVectorStore:
         
         Schema:
         - chunk_id: Primary key (auto-generated)
-        - embedding: Vector field (384 dimensions)
+        - embedding: Vector field (1024 dimensions)
         - text: Chunk text content
         - source_file: Source document filename
         - chunk_index: Position in document
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         # Initialize store
         store = MilvusVectorStore(
             collection_name="test_collection",
-            embedding_dim=384
+            embedding_dim=1024
         )
         
         print("\n📊 Collection Stats:")

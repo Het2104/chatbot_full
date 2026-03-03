@@ -4,7 +4,7 @@ Embedder Module
 Generates embeddings (vector representations) for text chunks.
 This is Step 6 of the RAG pipeline: Embedding Generation.
 
-Uses sentence-transformers with all-MiniLM-L12-v2 model for semantic embeddings.
+Uses sentence-transformers with BAAI/bge-large-en-v1.5 model for semantic embeddings.
 """
 
 import numpy as np
@@ -27,14 +27,14 @@ class Embedder:
     """
     Generates embeddings for text using sentence-transformers.
     
-    Model: all-MiniLM-L12-v2
-    - 384 dimensions
-    - 12 transformer layers
-    - Better quality than L6, still fast
-    - ~120MB model size
+    Model: BAAI/bge-large-en-v1.5
+    - 1024 dimensions
+    - Large transformer model
+    - Excellent quality for text, tables, and OCR content
+    - ~1.3GB model size
     """
     
-    def __init__(self, model_name: str = 'all-MiniLM-L12-v2', cache_dir: Optional[str] = None):
+    def __init__(self, model_name: str = 'BAAI/bge-large-en-v1.5', cache_dir: Optional[str] = None):
         """
         Initialize the embedder with a specific model.
         
@@ -49,7 +49,7 @@ class Embedder:
         self.cache_dir = cache_dir
         
         logger.info(f"Loading embedding model: {model_name}")
-        logger.info("First run will download ~120MB model")
+        logger.info("First run will download ~1.3GB model")
         
         try:
             self.model = SentenceTransformer(model_name, cache_folder=cache_dir)
