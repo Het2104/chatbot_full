@@ -88,6 +88,7 @@ def create_node(workflow_id: int, node: NodeCreate, db: Session = Depends(get_db
         workflow_id=workflow_id,
         node_type=node.node_type,
         text=node.text,
+        bot_message=node.bot_message,
         position_x=node.position_x,
         position_y=node.position_y
     )
@@ -215,6 +216,10 @@ def update_node(node_id: int, node_update: NodeUpdate, db: Session = Depends(get
         
         node.text = node_update.text
     
+    # Update bot_message if provided
+    if node_update.bot_message is not None:
+        node.bot_message = node_update.bot_message
+
     # Update position if provided (visual editor only, doesn't affect chatbot logic)
     if node_update.position_x is not None:
         node.position_x = node_update.position_x

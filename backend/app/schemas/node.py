@@ -16,7 +16,8 @@ class NodeCreate(BaseModel):
     """Request body for creating a new node inside a workflow."""
 
     node_type: Literal["trigger", "response"]  # Type determines role in conversation flow
-    text: str                                  # Message content shown to or sent by the user
+    text: str                                  # Trigger label or button name
+    bot_message: Optional[str] = None          # Bot response displayed to the user
     position_x: Optional[int] = None           # Horizontal position in the visual editor
     position_y: Optional[int] = None           # Vertical position in the visual editor
 
@@ -34,6 +35,7 @@ class NodeResponse(BaseModel):
     workflow_id: int
     node_type: Literal["trigger", "response"]
     text: str
+    bot_message: Optional[str] = None  # Bot response displayed to the user
     position_x: Optional[int] = None  # X position in visual editor (does not affect logic)
     position_y: Optional[int] = None  # Y position in visual editor (does not affect logic)
     created_at: datetime
@@ -43,11 +45,12 @@ class NodeResponse(BaseModel):
 
 
 class NodeUpdate(BaseModel):
-    """Request body for partial node updates (text and/or visual position)."""
+    """Request body for partial node updates (text, bot_message, and/or visual position)."""
 
-    text: Optional[str] = None        # New message content (None = no change)
-    position_x: Optional[int] = None  # New horizontal position (None = no change)
-    position_y: Optional[int] = None  # New vertical position (None = no change)
+    text: Optional[str] = None             # New trigger label / button name (None = no change)
+    bot_message: Optional[str] = None      # New bot response text (None = no change)
+    position_x: Optional[int] = None       # New horizontal position (None = no change)
+    position_y: Optional[int] = None       # New vertical position (None = no change)
 
     @field_validator("text")
     @classmethod

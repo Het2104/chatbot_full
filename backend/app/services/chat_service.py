@@ -334,13 +334,17 @@ def process_message(
         child_nodes = _get_node_children(matched_node.id, db)
         
         if child_nodes:
-            # This node has children - show them as next conversation options
-            bot_response = "Please choose:"
+            # This node has children - use its bot_message as the reply,
+            # then show the child nodes as the next conversation options.
+            # Fall back to a generic prompt only when no bot_message is set.
+            bot_response = matched_node.bot_message or "Please choose:"
             next_options = child_nodes
             logger.info(f"Workflow node matched: '{matched_node.text}' with {len(child_nodes)} child options")
         else:
-            # This is a leaf node (no children) - use its text as the final response
-            bot_response = matched_node.text
+            # This is a leaf node (no children) - use its bot_message as the
+            # final response. Fall back to the node's label text only if
+            # bot_message was never set.
+            bot_response = matched_node.bot_message or matched_node.text
             logger.info(f"Workflow leaf node matched: '{matched_node.text}' - final response")
     
     # ========================================================================
@@ -458,10 +462,10 @@ def check_sync_response(
     if matched_node:
         child_nodes = _get_node_children(matched_node.id, db)
         if child_nodes:
-            bot_response = "Please choose:"
+            bot_response = matched_node.bot_message or "Please choose:"
             next_options = child_nodes
         else:
-            bot_response = matched_node.text
+            bot_response = matched_node.bot_message or matched_node.text
             next_options = []
         logger.info(f"Sync match (workflow) for session_id={session_id}")
         _save_chat_messages(session_id, user_message, bot_response, db)
