@@ -14,10 +14,12 @@ This powers the RAG (Retrieval Augmented Generation) system.
 
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.dependencies.auth import get_current_admin_user
+from app.models.user import User
 from app.services.pdf_processing_service import PDFProcessingService
 from app.services.minio_storage import get_minio_storage
 from app.rag.storage.milvus_store import MilvusVectorStore
@@ -70,7 +72,7 @@ class UploadResponse(BaseModel):
 
 
 @router.post("/pdf", response_model=UploadResponse)
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), current_user: User = Depends(get_current_admin_user)):
     """
     Upload and process a PDF file for RAG (Retrieval Augmented Generation).
     
@@ -273,7 +275,7 @@ async def list_pdfs():
 
 
 @router.delete("/pdf/{filename}")
-async def delete_pdf(filename: str):
+async def delete_pdf(filename: str, current_user: User = Depends(get_current_admin_user)):
     """
     Delete a PDF file from MinIO and its chunks from Milvus.
     

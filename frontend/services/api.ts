@@ -426,8 +426,10 @@ export async function uploadPdf(file: File): Promise<{
 	formData.append("file", file);
 
 	// Make request (don't set Content-Type - browser sets it with boundary)
+	const token = localStorage.getItem('access_token');
 	const response = await fetch(`${BASE_URL}/api/upload/pdf`, {
 		method: "POST",
+		headers: token ? { Authorization: `Bearer ${token}` } : {},
 		body: formData,
 	});
 
@@ -474,4 +476,38 @@ export async function deletePdf(filename: string) {
 	return request(`/api/upload/pdf/${encodeURIComponent(filename)}`, {
 		method: "DELETE",
 	});
+}
+
+/* ===============================================================
+ * URL INGESTION APIs
+ * =============================================================== */
+
+/**
+ * Ingest a public web page into the RAG vector store.
+ * If the URL was already indexed, it will be re-ingested (old vectors replaced).
+ *
+ * @param url - Fully-qualified http/https URL
+ * @returns URLIngestResponse with success flag, title, and stats
+ */
+export async function ingestUrl(url: string) {
+	return request("/api/upload/url", { method: "POST", body: { url } });
+}
+
+/**
+ * List all URLs that have been indexed into the vector store.
+ *
+ * @returns Array of { id, url, title, num_chunks, indexed_at }
+ */
+export async function getIndexedUrls() {
+	return request("/api/upload/urls");
+}
+
+/**
+ * Remove a URL's vectors from Milvus and delete its database record.
+ *
+ * @param urlId - Numeric ID of the indexed URL record
+ * @returns { success: true, message: string }
+ */
+export async function deleteUrl(urlId: number) {
+	return request(`/api/upload/url/${urlId}`, { method: "DELETE" });
 }

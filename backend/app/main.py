@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from database import create_tables
 from app.routers import chatbots, workflows, nodes, edges, chat, faqs, upload, auth
 from app.routers import websocket as websocket_router
+from app.routers import url_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.logging_config import setup_logging, get_logger
 from app.config import CORS_ALLOWED_ORIGINS, LOG_LEVEL, validate_config
@@ -113,6 +114,12 @@ app.include_router(
     upload.router, 
     prefix="",  # Uses /api/upload prefix defined in router
     tags=["Upload"]
+)
+
+# URL ingestion for RAG
+app.include_router(
+    url_router.router,
+    prefix="",  # Uses /api/upload prefix defined in router
 )
 
 # WebSocket endpoint for real-time chat streaming

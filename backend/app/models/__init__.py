@@ -7,6 +7,7 @@ from .chat_session import ChatSession
 from .chat_message import ChatMessage
 from .faq import FAQ
 from .user import User
+from .indexed_url import IndexedURL
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "ChatMessage",
     "FAQ",
     "User",
+    "IndexedURL",
 ]

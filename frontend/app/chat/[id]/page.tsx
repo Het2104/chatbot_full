@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { startChat, sendMessage, getParentFAQs } from "../../../services/api";
 import PdfUploadButton from "../../../components/PdfUploadButton";
+import UrlIngestButton from "../../../components/UrlIngestButton";
 
 type Message = {
   sender: "user" | "bot";
@@ -289,6 +290,14 @@ export default function ChatPage() {
           }}
           onUploadError={(error) => {
             console.error("Upload error:", error);
+          }}
+        />
+        <UrlIngestButton
+          onIngestSuccess={(url, numChunks) => {
+            console.log(`Indexed ${url} with ${numChunks} chunks`);
+          }}
+          onIngestError={(error) => {
+            console.error("URL ingest error:", error);
           }}
         />
         <input
