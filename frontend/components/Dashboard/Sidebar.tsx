@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { MessageSquare, Network, HelpCircle, Book, LogOut, User } from 'lucide-react';
+import { MessageSquare, Network, HelpCircle, Book, Code2, LogOut } from 'lucide-react';
 
 interface SidebarProps {
     currentView: string;
@@ -15,6 +15,7 @@ export default function Sidebar({ currentView, onViewChange, chatbotName = "AI C
         { id: 'workflows', label: 'Workflows', icon: <Network size={20} /> },
         { id: 'faq', label: 'FAQ Manager', icon: <HelpCircle size={20} /> },
         { id: 'knowledge', label: 'Knowledge Base', icon: <Book size={20} /> },
+        { id: 'widget', label: 'Embed Widget', icon: <Code2 size={20} /> },
     ];
 
     return (

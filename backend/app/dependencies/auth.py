@@ -49,8 +49,16 @@ def get_current_user(
         )
     
     # Extract user_id from payload
-    user_id: Optional[int] = payload.get("sub")
-    if user_id is None:
+    sub = payload.get("sub")
+    if sub is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        user_id = int(sub)
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",

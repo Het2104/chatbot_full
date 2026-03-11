@@ -7,11 +7,12 @@ import ChatInterface from './ChatInterface';
 import Workflows from './Workflows';
 import FAQManager from './FAQManager';
 import KnowledgeBase from './KnowledgeBase';
+import EmbedWidget from './EmbedWidget';
 import { getChatbots } from '../../services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { NavBar } from '@/components/NavBar';
 
-type ViewType = 'chat' | 'workflows' | 'faq' | 'knowledge';
+type ViewType = 'chat' | 'workflows' | 'faq' | 'knowledge' | 'widget';
 
 interface DashboardLayoutProps {
     chatbotId: string;
@@ -65,6 +66,8 @@ export default function DashboardLayout({ chatbotId }: DashboardLayoutProps) {
                 return <FAQManager chatbotId={chatbotId} />;
             case 'knowledge':
                 return <KnowledgeBase />;
+            case 'widget':
+                return <EmbedWidget chatbotId={chatbotId} />;
             default:
                 return <ChatInterface chatbotId={chatbotId} />;
         }

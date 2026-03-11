@@ -114,6 +114,31 @@ export async function deleteChatbot(chatbotId: string | number) {
 	return request(`/chatbots/${chatbotId}`, { method: "DELETE" });
 }
 
+/**
+ * Update widget embed settings for a chatbot
+ * 
+ * @param chatbotId - ID of the chatbot
+ * @param data - { widget_color?, widget_welcome_message?, widget_position? }
+ * @returns Updated chatbot (includes embed_key)
+ */
+export async function updateWidgetSettings(chatbotId: string | number, data: {
+	widget_color?: string;
+	widget_welcome_message?: string;
+	widget_position?: string;
+}) {
+	return request(`/chatbots/${chatbotId}/widget`, { method: "PATCH", body: data });
+}
+
+/**
+ * Get a single chatbot by ID (includes embed_key and widget settings)
+ * 
+ * @param chatbotId - ID of the chatbot
+ * @returns Chatbot object
+ */
+export async function getChatbot(chatbotId: string | number) {
+	return request(`/chatbots/${chatbotId}`);
+}
+
 /* ===============================================================
  * FAQ MANAGEMENT APIs
  * =============================================================== */
@@ -409,7 +434,7 @@ export async function queueMessage(
  *   - error: error message if failed
  * @throws Error if upload fails or processing fails
  */
-export async function uploadPdf(file: File): Promise<{
+export async function uploadPdf(file: File, authToken?: string): Promise<{
 	success: boolean;
 	message: string;
 	filename: string;
@@ -425,13 +450,22 @@ export async function uploadPdf(file: File): Promise<{
 	const formData = new FormData();
 	formData.append("file", file);
 
-	// Make request (don't set Content-Type - browser sets it with boundary)
-	const token = localStorage.getItem('access_token');
+	// Use the provided token, or fall back to localStorage
+	const token = authToken ?? (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
 	const response = await fetch(`${BASE_URL}/api/upload/pdf`, {
 		method: "POST",
 		headers: token ? { Authorization: `Bearer ${token}` } : {},
 		body: formData,
 	});
+
+	// Handle token expiration (same as request())
+	if (response.status === 401) {
+		if (typeof window !== 'undefined') {
+			localStorage.removeItem('access_token');
+			window.dispatchEvent(new Event('auth:logout'));
+		}
+		throw new Error('Session expired. Please login again.');
+	}
 
 	// Handle error responses
 	if (!response.ok) {

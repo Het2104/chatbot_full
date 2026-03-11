@@ -375,11 +375,11 @@ class RedisPubSubService:
             # Each subscriber gets its own connection (not pooled for pub/sub)
             sub_client = redis.Redis(
                 host=REDIS_HOST,
-                port=REDIS_PORT,
-                db=REDIS_DB,
-                password=REDIS_PASSWORD or None,
-                decode_responses=True,
-                socket_timeout=None,       # Blocking — needed for listen()
+                port=REDIS_PORT,  
+                db=REDIS_DB,  
+                password=REDIS_PASSWORD or None,  
+                decode_responses=True,  
+                socket_timeout=None,       # Blocking — need  ed for listen()
                 socket_connect_timeout=5,
             )
 

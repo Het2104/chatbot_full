@@ -11,6 +11,8 @@ import {
   createFAQ,
   updateFAQ,
   deleteFAQ,
+  getChatbot,
+  updateWidgetSettings,
 } from "../../../services/api";
 
 type Workflow = {
@@ -30,12 +32,21 @@ type FAQ = {
   created_at: string;
 };
 
+type ChatbotDetail = {
+  id: number;
+  name: string;
+  embed_key: string;
+  widget_color: string;
+  widget_welcome_message: string;
+  widget_position: string;
+};
+
 export default function ChatbotPage() {
   const params = useParams();
   const router = useRouter();
   const chatbotId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<"workflows" | "faqs">("workflows");
+  const [activeTab, setActiveTab] = useState<"workflows" | "faqs" | "widget">("workflows");
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [faqs, setFAQs] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +59,16 @@ export default function ChatbotPage() {
   const [faqAnswer, setFaqAnswer] = useState("");
   const [faqParentId, setFaqParentId] = useState<string>("");
   const [faqSubmitting, setFaqSubmitting] = useState(false);
+
+  // Widget state
+  const [chatbotDetail, setChatbotDetail] = useState<ChatbotDetail | null>(null);
+  const [widgetColor, setWidgetColor] = useState("#2563EB");
+  const [widgetWelcome, setWidgetWelcome] = useState("Hi! How can I help you?");
+  const [widgetPosition, setWidgetPosition] = useState("bottom-right");
+  const [widgetSaving, setWidgetSaving] = useState(false);
+  const [widgetSaved, setWidgetSaved] = useState(false);
+  const [embedCopied, setEmbedCopied] = useState(false);
+  const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const parentQuestionById = faqs.reduce<Record<number, string>>((acc, faq) => {
     acc[faq.id] = faq.question;
@@ -80,11 +101,29 @@ export default function ChatbotPage() {
     }
   };
 
+  const loadChatbotDetail = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = (await getChatbot(chatbotId)) as ChatbotDetail;
+      setChatbotDetail(data);
+      setWidgetColor(data.widget_color);
+      setWidgetWelcome(data.widget_welcome_message);
+      setWidgetPosition(data.widget_position);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load chatbot details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "workflows") {
       loadWorkflows();
-    } else {
+    } else if (activeTab === "faqs") {
       loadFAQs();
+    } else if (activeTab === "widget") {
+      loadChatbotDetail();
     }
   }, [chatbotId, activeTab]);
 
@@ -228,6 +267,19 @@ export default function ChatbotPage() {
           }}
         >
           FAQs
+        </button>
+        <button
+          onClick={() => setActiveTab("widget")}
+          style={{
+            padding: "8px 16px",
+            border: "none",
+            background: "transparent",
+            borderBottom: activeTab === "widget" ? "2px solid #3b82f6" : "none",
+            cursor: "pointer",
+            fontWeight: activeTab === "widget" ? "bold" : "normal",
+          }}
+        >
+          🔌 Embed Widget
         </button>
       </div>
 
@@ -438,6 +490,165 @@ export default function ChatbotPage() {
               </li>
             ))}
           </ul>
+        </>
+      )}
+
+      {/* Widget Tab */}
+      {activeTab === "widget" && (
+        <>
+          {loading && <p>Loading...</p>}
+
+          {chatbotDetail && (
+            <>
+              {/* Widget Settings Form */}
+              <form onSubmit={handleSaveWidgetSettings} style={{ marginBottom: 32 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 16 }}>Widget Appearance</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span>Bubble Color</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="color"
+                        value={widgetColor}
+                        onChange={(e) => setWidgetColor(e.target.value)}
+                        style={{ width: 48, height: 36, padding: 2, border: "1px solid #ddd", borderRadius: 4, cursor: "pointer" }}
+                      />
+                      <input
+                        type="text"
+                        value={widgetColor}
+                        onChange={(e) => setWidgetColor(e.target.value)}
+                        style={{ padding: "6px 10px", border: "1px solid #ddd", borderRadius: 4, width: 120 }}
+                      />
+                      <div
+                        style={{
+                          width: 36, height: 36, borderRadius: "50%",
+                          background: widgetColor,
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span>Welcome Message</span>
+                    <input
+                      type="text"
+                      value={widgetWelcome}
+                      onChange={(e) => setWidgetWelcome(e.target.value)}
+                      placeholder="Hi! How can I help you?"
+                      style={{ padding: "8px 10px", border: "1px solid #ddd", borderRadius: 4 }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span>Position</span>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      {(["bottom-right", "bottom-left"] as const).map((pos) => (
+                        <label key={pos} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                          <input
+                            type="radio"
+                            name="widgetPosition"
+                            value={pos}
+                            checked={widgetPosition === pos}
+                            onChange={() => setWidgetPosition(pos)}
+                          />
+                          {pos}
+                        </label>
+                      ))}
+                    </div>
+                  </label>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <button
+                      type="submit"
+                      disabled={widgetSaving}
+                      style={{
+                        padding: "8px 20px",
+                        background: "#2563eb",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: widgetSaving ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                        opacity: widgetSaving ? 0.7 : 1,
+                      }}
+                    >
+                      {widgetSaving ? "Saving…" : "Save Settings"}
+                    </button>
+                    {widgetSaved && (
+                      <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Saved!</span>
+                    )}
+                  </div>
+                </div>
+              </form>
+
+              {/* Embed Code */}
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  padding: 20,
+                  backgroundColor: "#f8fafc",
+                }}
+              >
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>Embed Code</h3>
+                <p style={{ color: "#64748b", fontSize: 14, marginBottom: 12 }}>
+                  Paste this tag inside the <code>&lt;body&gt;</code> of any website to show the chat bubble.
+                </p>
+                <pre
+                  style={{
+                    background: "#1e293b",
+                    color: "#e2e8f0",
+                    padding: "12px 16px",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    overflowX: "auto",
+                    marginBottom: 12,
+                    userSelect: "all",
+                  }}
+                >
+                  {`<script src="${BASE_API_URL}/widget/${chatbotDetail.embed_key}.js"></script>`}
+                </pre>
+                <button
+                  onClick={handleCopyEmbedCode}
+                  style={{
+                    padding: "7px 16px",
+                    background: embedCopied ? "#16a34a" : "#334155",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {embedCopied ? "✓ Copied!" : "Copy to Clipboard"}
+                </button>
+              </div>
+
+              {/* Live Preview */}
+              <div style={{ marginTop: 24 }}>
+                <h3 style={{ marginBottom: 8 }}>Preview</h3>
+                <p style={{ color: "#64748b", fontSize: 14, marginBottom: 10 }}>
+                  This is how the chat window will look when embedded.
+                </p>
+                <iframe
+                  src={`/embed/${chatbotDetail.embed_key}`}
+                  style={{
+                    width: "100%",
+                    height: 480,
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 12,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  }}
+                  title="Widget Preview"
+                />
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

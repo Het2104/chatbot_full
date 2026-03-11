@@ -11,7 +11,7 @@ from typing import List
 
 from database import get_db
 from app.models.chatbot import Chatbot
-from app.schemas.chatbot import ChatbotCreate, ChatbotResponse
+from app.schemas.chatbot import ChatbotCreate, ChatbotResponse, WidgetUpdate
 from app.utils import entity_not_found_error
 
 router = APIRouter()
@@ -78,6 +78,45 @@ def get_chatbot(chatbot_id: int, db: Session = Depends(get_db)):
             detail=entity_not_found_error("Chatbot", chatbot_id)
         )
     
+    return chatbot
+
+
+@router.patch("/{chatbot_id}/widget", response_model=ChatbotResponse)
+def update_widget_settings(chatbot_id: int, settings: WidgetUpdate, db: Session = Depends(get_db)):
+    """
+    Update the widget embed settings for a chatbot.
+
+    Allows partial updates — only the provided fields are changed.
+
+    Path parameters:
+        chatbot_id: Unique identifier of the chatbot
+
+    Request body (all optional):
+        widget_color: Hex color for the bubble button (e.g. "#2563EB")
+        widget_welcome_message: First message shown to visitors
+        widget_position: "bottom-right" or "bottom-left"
+
+    Returns:
+        The updated chatbot with all fields including embed_key
+    """
+    chatbot = db.query(Chatbot).filter(Chatbot.id == chatbot_id).first()
+    if not chatbot:
+        raise HTTPException(
+            status_code=404,
+            detail=entity_not_found_error("Chatbot", chatbot_id)
+        )
+
+    if settings.widget_color is not None:
+        chatbot.widget_color = settings.widget_color
+    if settings.widget_welcome_message is not None:
+        chatbot.widget_welcome_message = settings.widget_welcome_message
+    if settings.widget_position is not None:
+        if settings.widget_position not in ("bottom-right", "bottom-left"):
+            raise HTTPException(status_code=422, detail="widget_position must be 'bottom-right' or 'bottom-left'")
+        chatbot.widget_position = settings.widget_position
+
+    db.commit()
+    db.refresh(chatbot)
     return chatbot
 
 

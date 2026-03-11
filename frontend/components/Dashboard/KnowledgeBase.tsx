@@ -21,7 +21,7 @@ type IndexedUrl = {
 };
 
 export default function KnowledgeBase() {
-    const { role } = useAuth();
+    const { role, token: authToken } = useAuth();
     const isAdmin = role === 'admin';
     const [pdfs, setPdfs] = useState<IndexedPdf[]>([]);
     const [urls, setUrls] = useState<IndexedUrl[]>([]);
@@ -68,7 +68,7 @@ export default function KnowledgeBase() {
         setError(null);
 
         try {
-            await uploadPdf(file);
+            await uploadPdf(file, authToken ?? undefined);
             await loadPdfs();
             if (fileInputRef.current) fileInputRef.current.value = "";
         } catch (err) {

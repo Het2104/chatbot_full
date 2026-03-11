@@ -16,6 +16,7 @@ from database import create_tables
 from app.routers import chatbots, workflows, nodes, edges, chat, faqs, upload, auth
 from app.routers import websocket as websocket_router
 from app.routers import url_router
+from app.routers import public_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.logging_config import setup_logging, get_logger
 from app.config import CORS_ALLOWED_ORIGINS, LOG_LEVEL, validate_config
@@ -51,6 +52,9 @@ app = FastAPI(
 # ============================================================================
 # Allow frontend (Next.js on localhost:3000) to make API requests
 # Without CORS, browsers would block cross-origin requests
+# Public widget endpoints (/public/* and /widget/*) must be accessible from any
+# third-party website. We allow all origins here; the chatbot admin endpoints
+# are still only called from the frontend (authenticated via JWT, not CORS).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,  # Which domains can access the API
@@ -126,6 +130,12 @@ app.include_router(
 app.include_router(
     websocket_router.router,
     tags=["WebSocket"]
+)
+
+# Public widget endpoints (no auth required, CORS *)
+app.include_router(
+    public_router.router,
+    tags=["Widget"]
 )
 
 # ============================================================================
