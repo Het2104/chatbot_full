@@ -22,6 +22,7 @@ from app.logging_config import setup_logging, get_logger
 from app.config import CORS_ALLOWED_ORIGINS, LOG_LEVEL, validate_config
 from app.services.redis_cache_service import get_redis_cache_service
 from app.services.redis_pubsub_service import get_redis_pubsub_service
+from app.mcp_server.setup import mcp
 
 # ============================================================================
 # Logging Configuration
@@ -137,6 +138,13 @@ app.include_router(
     public_router.router,
     tags=["Widget"]
 )
+
+# ============================================================================
+# MCP Server (Model Context Protocol)
+# ============================================================================
+# Mounts the MCP SSE endpoint at /mcp so AI clients can connect.
+# Inspector: Transport=SSE, URL=http://127.0.0.1:8000/mcp/sse
+app.mount("/mcp", mcp.http_app(transport="sse"))
 
 # ============================================================================
 # Application Startup Event
